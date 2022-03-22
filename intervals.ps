@@ -1,0 +1,179 @@
+%!
+/include [[1 5] [4 6] [10 20] [30 100]] def
+/exclude [[4 11] [25 30]] def
+
+/Times-Roman findfont 12 scalefont setfont
+
+% types:
+% interval: [begin:int end:int]
+% intervalTag: [tag:str position:int] where tag is one of incBegin, incEnd, excBegin or excEnd.
+
+% Notes:
+% A4 is 595 x 842 points
+
+% Copied from http://comp.lang.postscript.narkive.com/gooDxf30/merge-two-arrays-in-postscript
+/concatarray % stack arr arr: [a1 a2] [a3 a4] => [a1 a2 a3 a4]
+{ exch 2 copy length exch length add array
+  dup dup 5 2 roll copy length exch putinterval
+} bind def
+
+% Copied from https://www.tinaja.com/glib/strconv.pdf
+/mergestr % stack str str: (str1) (str2) => (str1str2)
+{2 copy length exch length add string dup dup 4 3 roll 4 index length exch putinterval 3 1 roll exch 0 exch putinterval} def
+
+/i2s % stack x: integer => str
+{ 20 string cvs } def
+
+% Convert an interval to a string.
+/iv2str % stack interval: [10 20] => (10-20)
+{
+	dup
+	/begin exch 0 get i2s def
+	/end   exch 1 get i2s def
+	begin (-) mergestr  % (20) (10-)
+	end mergestr % (10-20)
+} def
+
+/iv2tag % stack type interval: (inc) [begin end] => [[(incBegin) begin] [(incEnd) end]]
+{
+	/intv exch def
+	/pretag exch def
+	[
+		[ pretag (Begin) mergestr
+		  intv 0 get ]
+		[ pretag (End) mergestr
+		  intv 1 get 1 add ]
+	]
+} def
+
+% Interval tags are sorted first by position, then by type.
+% Types have the following order: excBegin, incEnd, incBegin, excEnd
+/cmp % stack intervalTag1 intervalTag2: -1, 0 or 1
+{
+	/tagtypeval % stack type: str => int
+	{
+		/t exch def
+		t (excBegin) eq { 0 } if
+		t (incEnd)   eq { 1 } if
+		t (incBegin) eq { 2 } if
+		t (excEnd)   eq { 3 } if
+	} def
+
+	/tag2 exch def
+	/tag1 exch def
+	/type1 tag1 0 get def
+	/pos1 tag1 1 get def
+	/type2 tag2 0 get def
+	/pos2 tag2 1 get def
+	pos1 pos2 eq
+		{ % eq - compare types
+			/tv1 type1 tagtypeval def
+			/tv2 type2 tagtypeval def
+			tv1 tv2 eq
+				{ 0 }
+				{ tv1 tv2 lt { -1 } { 1 } ifelse }
+			ifelse
+		}
+		{ % not - compare positions
+			pos1 pos2 lt { -1 } { 1 } ifelse
+		}
+	ifelse
+} def
+
+% Copied and adjusted from https://www.math.ubc.ca/~cass/graphics/manual/pdf/ch9.pdf
+% args: array a of numbers
+% effect: sorts the array in order
+/bubblesort {
+	4 dict begin
+	/a exch def
+	/n a length 1 sub def
+	n 0 gt {
+		% at this point only the n+1 items in the bottom of a remain to be sorted
+		% the largest item in that block is to be moved up into position n
+		n {
+			0 1 n 1 sub {
+				/i exch def
+				a i get a i 1 add get cmp 1 eq {
+				% a i get a i 1 add get gt {
+					% if a[i] > a[i+1] swap a[i] and a[i+1]
+					a i 1 add
+					a i get
+					a i a i 1 add get
+					% set new a[i] = old a[i+1]
+					put
+					% set new a[i+1] = old a[i]
+					put
+				} if
+			} for
+			/n n 1 sub def
+		} repeat
+	} if
+	end
+} def
+
+/intervalstotags { % stack (type) [intervals] => [tags]
+	/intervals exch def
+	/type exch def
+	/result [] def
+	intervals {
+		type exch iv2tag result concatarray
+		/result exch def
+	} forall
+	result
+} def
+
+/tagstointervals { % stack [tags] => [intervals]
+	/result [] def
+	/isinside false def
+	/startlast 0 def
+	/countinc 0 def
+	/countexc 0 def
+	{
+		dup
+		0 get /type exch def
+		1 get /pos exch def
+		type (incBegin) eq { /countinc countinc 1 add def } if
+		type (excBegin) eq { /countexc countexc 1 add def } if
+		type (incEnd)   eq { /countinc countinc 1 sub def } if
+		type (excEnd)   eq { /countexc countexc 1 sub def } if
+		countinc 0 ne countexc 0 eq and {
+			isinside not {
+				/startlast pos def
+			} if
+			/isinside true def
+		} {
+			isinside {
+				/newintv [startlast pos 1 sub] def
+				result [newintv] concatarray
+				/result exch def
+			} if
+			/isinside false def
+		} ifelse
+	} forall
+	result
+} def
+
+/intervalarraytostring { % stack [intervals] => description
+	/result () def
+	{
+		iv2str /x exch def
+		result x mergestr ( ) mergestr
+		/result exch def
+	} forall
+	result
+} def
+
+(inc) include intervalstotags
+(exc) exclude intervalstotags
+concatarray
+/inputTags exch def
+
+inputTags bubblesort
+
+inputTags tagstointervals intervalarraytostring
+/resultstring exch def
+
+% Print the answer!
+36 700 moveto
+resultstring show
+showpage

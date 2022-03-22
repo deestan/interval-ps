@@ -1,0 +1,1 @@
+PostScript implementation of Vizrt Norway's classic but now obsolete programming test "intervals".
